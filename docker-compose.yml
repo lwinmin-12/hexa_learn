@@ -1,4 +1,51 @@
+x-api-environment: &api-environment
+  NODE_ENV: production
+  PORT: 3000
+  # Encode credentials so passwords containing URL characters work as well.
+  # DATABASE_URL is constructed by the startup command for both services.
+  REDIS_URL: redis://redis:6379
+  S3_ENDPOINT: http://minio:9000
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:9000}
+
 services:
+  api:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      <<: *api-environment
+    command: ["node", "dist/docker-start.js"]
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  setup:
+    build:
+      context: .
+      target: build
+    env_file: .env
+    environment:
+      <<: *api-environment
+    command: ["node", "dist/docker-start.js", "setup"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   db:
     image: postgres:16-alpine
     container_name: hexa_db

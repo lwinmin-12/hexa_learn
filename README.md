@@ -33,6 +33,35 @@ $ npm install
 
 ## Compile and run the project
 
+### Run the full stack with Docker
+
+Copy `.env.example` to `.env` if needed and fill in your Firebase credentials.
+For Docker, use `FIREBASE_SERVICE_ACCOUNT_BASE64` or the project ID, client email,
+and private key fields. A host `GOOGLE_APPLICATION_CREDENTIALS` path is not
+available inside the container; remove that setting when using inline credentials.
+Keep the S3 access/secret keys aligned with the MinIO root credentials.
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f api
+```
+
+The API is available at `http://localhost:3000/api/v1` and docs at
+`http://localhost:3000/docs` (or your configured `PORT`). The setup service
+applies committed Prisma migrations and creates the storage buckets before the
+API starts. PostgreSQL, Redis, and MinIO data persist in named volumes.
+`docker compose down` stops the stack while preserving that data.
+
+Compose overrides host database, Redis, and S3 connection addresses with service
+names. `S3_PUBLIC_URL` is used to sign browser-facing URLs; keep it as
+`http://localhost:9000` locally or set it to a storage address your clients can
+reach. Internal storage requests use `http://minio:9000`.
+
+After schema or source changes, run `docker compose up -d --build` again.
+The first build needs internet access to download Node dependencies and compile
+MinIO. For infrastructure only, run `docker compose up -d db redis minio`.
+
 ### API documentation
 
 After starting the server, open [Scalar API docs](http://localhost:3000/docs).

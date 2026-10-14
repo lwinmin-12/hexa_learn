@@ -14,6 +14,7 @@ export type Bucket = 'VIDEOS' | 'MEDIA' | 'SLIPS';
 export class StorageService implements OnModuleDestroy {
   private readonly logger = new Logger(StorageService.name);
   private readonly client: S3Client;
+  private readonly signingClient: S3Client;
 
   constructor() {
     if (
@@ -33,7 +34,7 @@ export class StorageService implements OnModuleDestroy {
         'S3_ACCESS_KEY and S3_SECRET_KEY must be configured together',
       );
     }
-    this.client = new S3Client({
+    const options = {
       endpoint: process.env.S3_ENDPOINT,
       region: process.env.S3_REGION ?? 'us-east-1',
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
@@ -44,10 +45,14 @@ export class StorageService implements OnModuleDestroy {
           }
         : undefined,
       // A presigned PUT has no body yet. Do not sign the CRC32 of an empty body.
-      requestChecksumCalculation: 'WHEN_REQUIRED',
+      requestChecksumCalculation: 'WHEN_REQUIRED' as const,
       maxAttempts: 2,
       requestHandler: { connectionTimeout: 3000, requestTimeout: 30000 },
-    });
+    };
+    this.client = new S3Client(options);
+    this.signingClient = process.env.S3_PUBLIC_URL
+      ? new S3Client({ ...options, endpoint: process.env.S3_PUBLIC_URL })
+      : this.client;
   }
 
   bucket(type: Bucket) {
@@ -67,7 +72,7 @@ export class StorageService implements OnModuleDestroy {
   async get(type: Bucket, key: string) {
     try {
       return await getSignedUrl(
-        this.client,
+        this.signingClient,
         new GetObjectCommand({ Bucket: this.bucket(type), Key: key }),
         { expiresIn: 3600 },
       );
@@ -79,7 +84,7 @@ export class StorageService implements OnModuleDestroy {
   async putUrl(type: Bucket, key: string, contentType: string) {
     try {
       return await getSignedUrl(
-        this.client,
+        this.signingClient,
         new PutObjectCommand({
           Bucket: this.bucket(type),
           Key: key,
@@ -180,5 +185,6 @@ export class StorageService implements OnModuleDestroy {
 
   onModuleDestroy() {
     this.client.destroy();
+    if (this.signingClient !== this.client) this.signingClient.destroy();
   }
 }

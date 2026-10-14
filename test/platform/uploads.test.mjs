@@ -33,9 +33,10 @@ it('allows clearing existing audio and still rejects invalid URLs', async () => 
     'audioUrl',
   );
 });
-it('signs non-empty browser PUTs for the configured endpoint without an empty-body checksum', async () => {
+it.each(['', 'http://localhost:9000'])('signs browser URLs with public endpoint %s without an empty-body checksum', async (publicEndpoint) => {
   const vars = {
-    S3_ENDPOINT: 'http://localhost:9000',
+    S3_ENDPOINT: 'http://minio:9000',
+    S3_PUBLIC_URL: publicEndpoint,
     S3_REGION: 'us-east-1',
     S3_ACCESS_KEY: 'test-key',
     S3_SECRET_KEY: 'test-secret',
@@ -51,7 +52,10 @@ it('signs non-empty browser PUTs for the configured endpoint without an empty-bo
     const url = new URL(
       await storage.putUrl('VIDEOS', 'video.mp4', 'video/mp4'),
     );
-    expect(url.host).toBe('localhost:9000');
+    expect(url.host).toBe(publicEndpoint ? 'localhost:9000' : 'minio:9000');
+    const download = new URL(await storage.get('VIDEOS', 'video.mp4'));
+    expect(download.host).toBe(url.host);
+    expect(download.searchParams.has('X-Amz-Signature')).toBe(true);
     expect(url.pathname).toBe('/videos/video.mp4');
     expect(url.searchParams.has('x-amz-checksum-crc32')).toBe(false);
     expect(url.searchParams.get('X-Amz-SignedHeaders')).toContain(
