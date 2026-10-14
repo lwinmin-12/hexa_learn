@@ -9,8 +9,8 @@ import type { INestApplication } from '@nestjs/common';
 import pg from 'pg';
 import request from 'supertest';
 import { AuthModule } from '../dist/auth/auth.module.js';
-import { FirebaseService } from '../dist/auth/firebase.service.js';
-import { PrismaService } from '../dist/database/prisma.service.js';
+import { FirebaseAdminService } from '../dist/firebase-admin/firebase-admin.service.js';
+import { PrismaService } from '../dist/prisma/prisma.service.js';
 import { AccountDeletionService } from '../dist/auth/account-deletion.service.js';
 import { createValidationPipe } from '../dist/validation.js';
 
@@ -84,7 +84,7 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS !== '1')(
           AuthModule,
         ],
       })
-        .overrideProvider(FirebaseService)
+        .overrideProvider(FirebaseAdminService)
         .useValue(firebase)
         .overrideProvider(AccountDeletionService)
         .useValue({ flush: vi.fn().mockResolvedValue(undefined) })
@@ -309,7 +309,7 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS !== '1')(
       ).rejects.toMatchObject({ status: 401 });
       const worker = new AccountDeletionService(
         db,
-        firebase as unknown as FirebaseService,
+        firebase as unknown as FirebaseAdminService,
       );
       firebase.deleteUser.mockRejectedValueOnce(new Error('unavailable'));
       await worker.flush();

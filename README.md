@@ -33,6 +33,14 @@ $ npm install
 
 ## Compile and run the project
 
+### API documentation
+
+After starting the server, open [Scalar API docs](http://localhost:3000/docs).
+The Swagger-generated OpenAPI document is available at
+[openapi.json](http://localhost:3000/openapi.json). Use your configured `PORT`
+if it differs from 3000. For `/me` endpoints, paste a Firebase ID token into
+Scalar's bearer authentication field.
+
 ### Local MinIO storage
 
 Copy `.env.example` to `.env` if you do not already have one, then set
@@ -69,6 +77,49 @@ Set `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY`, and
 `GOOGLE_APPLICATION_CREDENTIALS` using `.env.example`. The credentials path must
 point to a Firebase service account JSON on the API host. Google Application
 Default Credentials also work on supported hosting. Never commit the JSON file.
+
+`src/firebase-admin` owns Firebase Admin initialization and token verification.
+You can alternatively configure `FIREBASE_SERVICE_ACCOUNT_BASE64` with the
+base64-encoded service account JSON, or set `FIREBASE_PROJECT_ID`,
+`FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` together. Escaped `\n` in the
+private key is supported. These credentials belong on the API server only.
+
+In Firebase Console → Authentication → Sign-in method, configure all three:
+
+- [Google](https://firebase.google.com/docs/auth/web/google-signin): enable Google and select a support email.
+- [Apple](https://firebase.google.com/docs/auth/web/apple): configure Sign in with Apple in your Apple developer account and enter its provider configuration in Firebase.
+- [Facebook](https://firebase.google.com/docs/auth/web/facebook-login): enter the Meta app ID and secret in Firebase and add Firebase's OAuth redirect URI to the Meta app.
+
+Add your frontend domain under Firebase Authentication's authorized domains.
+Provider credentials are configured in Firebase; the API accepts the resulting
+Firebase ID token for all three providers through the same `/auth/login` route.
+It derives the provider from verified claims and rejects unsupported login providers.
+
+Example frontend flow after initializing the Firebase client SDK:
+
+```ts
+import { getAuth, GoogleAuthProvider, FacebookAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
+
+const providers = {
+  google: new GoogleAuthProvider(),
+  apple: new OAuthProvider('apple.com'),
+  facebook: new FacebookAuthProvider(),
+};
+const result = await signInWithPopup(getAuth(), providers.google); // or apple / facebook
+const idToken = await result.user.getIdToken();
+const response = await fetch('/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ idToken }),
+});
+if (!response.ok) throw new Error('API login failed');
+const profile = await response.json();
+```
+
+The example assumes the frontend proxies API requests to this backend.
+Send the Firebase ID token, rather than a raw Google/Apple token or Facebook access token.
+The phone OTP controller routes below are currently commented out; their service
+implementation is retained, but those endpoints are not exposed.
 
 Enable Google, Apple, and/or Facebook sign-in and the Phone provider in the same
 Firebase project. Configure authorized frontend domains, SMS regions, and billing

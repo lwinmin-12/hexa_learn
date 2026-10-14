@@ -1,51 +1,101 @@
 import {
+  Injectable,
+  OnModuleInit,
+  UnauthorizedException,
   BadRequestException,
   ConflictException,
   HttpException,
   HttpStatus,
-  Inject,
-  Injectable,
   ServiceUnavailableException,
-  UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import {
+  applicationDefault,
+  cert,
+  getApps,
+  initializeApp,
+} from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import type { Auth } from 'firebase-admin/auth';
+import type { Auth, DecodedIdToken } from 'firebase-admin/auth';
 
-function errorCode(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error
-    ? String(error.code)
-    : undefined;
+export class InvalidFirebaseTokenException extends UnauthorizedException {
+  constructor(code = 'INVALID_TOKEN') {
+    super({
+      statusCode: 401,
+      message: 'Invalid or expired authentication token',
+      code,
+    });
+  }
 }
 
 @Injectable()
-export class FirebaseService {
-  private authInstance?: Auth;
+export class FirebaseAdminService implements OnModuleInit {
+  private auth!: Auth;
 
-  constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
+  onModuleInit() {
+    const appName = 'hexa-auth';
+    let app = getApps().find((candidate) => candidate.name === appName);
+    if (!app) {
+      const encoded = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+      let projectId = process.env.FIREBASE_PROJECT_ID;
+      let clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  private get auth(): Auth {
-    if (!this.authInstance) {
-      const name = 'hexa-auth';
-      const app =
-        getApps().find((item) => item.name === name) ??
-        initializeApp(
-          {
-            credential: applicationDefault(),
-            projectId: this.config.getOrThrow<string>('FIREBASE_PROJECT_ID'),
-          },
-          name,
+      if (encoded) {
+        try {
+          const credentials = JSON.parse(
+            Buffer.from(encoded, 'base64').toString('utf8'),
+          ) as Record<string, unknown>;
+          projectId =
+            typeof credentials.project_id === 'string'
+              ? credentials.project_id
+              : undefined;
+          clientEmail =
+            typeof credentials.client_email === 'string'
+              ? credentials.client_email
+              : undefined;
+          privateKey =
+            typeof credentials.private_key === 'string'
+              ? credentials.private_key
+              : undefined;
+          if (!projectId || !clientEmail || !privateKey) {
+            throw new Error('Incomplete service account');
+          }
+        } catch {
+          throw new Error(
+            'FIREBASE_SERVICE_ACCOUNT_BASE64 must contain base64-encoded service account JSON',
+          );
+        }
+      }
+
+      if (!projectId) throw new Error('FIREBASE_PROJECT_ID is required');
+      if ((clientEmail || privateKey) && (!clientEmail || !privateKey)) {
+        throw new Error(
+          'FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY must be set together',
         );
-      this.authInstance = getAuth(app);
+      }
+      app = initializeApp(
+        {
+          projectId,
+          credential:
+            clientEmail && privateKey
+              ? cert({
+                  projectId,
+                  clientEmail,
+                  privateKey: privateKey.replace(/\\n/g, '\n'),
+                })
+              : applicationDefault(),
+        },
+        appName,
+      );
     }
-    return this.authInstance;
+    this.auth = getAuth(app);
   }
 
-  async verifyIdToken(token: string) {
+  async verifyIdToken(token: string): Promise<DecodedIdToken> {
     try {
       return await this.auth.verifyIdToken(token, true);
-    } catch (error) {
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
       if (
         [
           'auth/argument-error',
@@ -54,10 +104,14 @@ export class FirebaseService {
           'auth/id-token-revoked',
           'auth/user-disabled',
           'auth/user-not-found',
-        ].includes(errorCode(error) ?? '')
+        ].includes(code ?? '')
       ) {
-        throw new UnauthorizedException(
-          'Invalid, expired, or revoked Firebase ID token',
+        throw new InvalidFirebaseTokenException(
+          code === 'auth/id-token-expired'
+            ? 'TOKEN_EXPIRED'
+            : code === 'auth/id-token-revoked'
+              ? 'TOKEN_REVOKED'
+              : 'INVALID_TOKEN',
         );
       }
       throw new ServiceUnavailableException(
@@ -66,11 +120,14 @@ export class FirebaseService {
     }
   }
 
+  async revokeRefreshTokens(uid: string): Promise<void> {
+    await this.auth.revokeRefreshTokens(uid);
+  }
   async deleteUser(uid: string) {
     try {
       await this.auth.deleteUser(uid);
     } catch (error) {
-      if (errorCode(error) !== 'auth/user-not-found') {
+      if ((error as { code?: string })?.code !== 'auth/user-not-found') {
         throw new ServiceUnavailableException(
           'Firebase account deletion is unavailable',
         );
@@ -121,7 +178,7 @@ export class FirebaseService {
     method: string,
     body: Record<string, string>,
   ): Promise<Record<string, unknown>> {
-    const apiKey = this.config.get<string>('FIREBASE_WEB_API_KEY');
+    const apiKey = process.env.FIREBASE_WEB_API_KEY;
     if (!apiKey)
       throw new ServiceUnavailableException(
         'Firebase phone authentication is not configured',

@@ -11,12 +11,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService, profile } from './auth.service.js';
-import { CurrentAuth, FirebaseAuthGuard } from './auth.guard.js';
-import type { AuthContext } from './auth.guard.js';
-import { RegisterDeviceDto, UpdateProfileDto } from './auth.dto.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+
+import { RegisterDeviceDto, UpdateProfileDto } from './dto/auth.dto.js';
 import { AccountDeletionService } from './account-deletion.service.js';
+import { CurrentAuth, FirebaseAuthGuard } from './guard/auth.guard.js';
+import type { AuthContext } from './guard/auth.guard.js';
 
 @Controller('me')
+@ApiTags('Account')
+@ApiBearerAuth()
 @UseGuards(FirebaseAuthGuard)
 export class MeController {
   constructor(

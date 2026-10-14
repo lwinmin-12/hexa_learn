@@ -35,6 +35,9 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
     });
   }
 
+  // Raw aggregate queries must use the same schema as the driver adapter.
+  get databaseSchema(): string { return this.schemaName; }
+
   async onModuleDestroy() {
     await this.$disconnect();
   }

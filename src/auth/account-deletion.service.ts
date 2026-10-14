@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service.js';
-import { FirebaseService } from './firebase.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { FirebaseAdminService } from '../firebase-admin/firebase-admin.service.js';
 
 @Injectable()
 export class AccountDeletionService implements OnModuleInit, OnModuleDestroy {
@@ -11,7 +11,8 @@ export class AccountDeletionService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @Inject(PrismaService) private readonly db: PrismaService,
-    @Inject(FirebaseService) private readonly firebase: FirebaseService,
+    @Inject(FirebaseAdminService)
+    private readonly firebase: FirebaseAdminService,
   ) {}
 
   onModuleInit() {

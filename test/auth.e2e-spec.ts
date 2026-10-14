@@ -6,7 +6,7 @@ import request from 'supertest';
 import { AuthController } from '../dist/auth/auth.controller.js';
 import { MeController } from '../dist/auth/me.controller.js';
 import { AuthService } from '../dist/auth/auth.service.js';
-import { FirebaseService } from '../dist/auth/firebase.service.js';
+import { FirebaseAdminService } from '../dist/firebase-admin/firebase-admin.service.js';
 import { AccountDeletionService } from '../dist/auth/account-deletion.service.js';
 import { createValidationPipe } from '../dist/validation.js';
 
@@ -35,7 +35,7 @@ describe('Auth route contracts', () => {
       providers: [
         { provide: AuthService, useValue: service },
         {
-          provide: FirebaseService,
+          provide: FirebaseAdminService,
           useValue: {
             verifyIdToken: vi.fn().mockResolvedValue({ uid: 'uid' }),
           },
@@ -71,8 +71,6 @@ describe('Auth route contracts', () => {
     ['get', '/me'],
     ['patch', '/me'],
     ['delete', '/me'],
-    ['post', '/auth/phone/send-otp'],
-    ['post', '/auth/phone/verify-otp'],
     ['post', '/me/device-tokens'],
     ['delete', '/me/device-tokens/token'],
   ] as const)('requires authentication for %s %s', async (method, path) => {
@@ -82,12 +80,6 @@ describe('Auth route contracts', () => {
   it.each([
     ['/auth/login', {}],
     ['/auth/login', { idToken: '' }],
-    [
-      '/auth/phone/send-otp',
-      { phone: '0912345678', recaptchaToken: 'captcha' },
-    ],
-    ['/auth/phone/send-otp', { phone: '+84912345678' }],
-    ['/auth/phone/verify-otp', { verificationId: 'bad-id', code: '123456' }],
     ['/me/device-tokens', { token: 'token', platform: 'unknown' }],
   ])('validates the body of %s: %j', async (path, body) => {
     await request(app.getHttpServer())

@@ -8,8 +8,8 @@ import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 import type { User } from '@prisma/client';
 import type { DecodedIdToken } from 'firebase-admin/auth';
-import { FirebaseService } from './firebase.service.js';
-import { AuthService } from './auth.service.js';
+import { FirebaseAdminService } from '../../firebase-admin/firebase-admin.service.js';
+import { AuthService } from '../auth.service.js';
 
 export interface AuthContext {
   user: User;
@@ -22,7 +22,8 @@ export type AuthRequest = Request & { auth: AuthContext };
 @Injectable()
 export class FirebaseAuthGuard implements CanActivate {
   constructor(
-    @Inject(FirebaseService) private readonly firebase: FirebaseService,
+    @Inject(FirebaseAdminService)
+    private readonly firebase: FirebaseAdminService,
     @Inject(AuthService) private readonly authService: AuthService,
   ) {}
 

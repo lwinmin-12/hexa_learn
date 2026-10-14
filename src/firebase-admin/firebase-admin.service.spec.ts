@@ -1,5 +1,4 @@
-import { ConfigService } from '@nestjs/config';
-import { FirebaseService } from './firebase.service.js';
+import { FirebaseAdminService } from './firebase-admin.service.js';
 
 const admin = vi.hoisted(() => ({
   verifyIdToken: vi.fn(),
@@ -7,26 +6,31 @@ const admin = vi.hoisted(() => ({
 }));
 vi.mock('firebase-admin/app', () => ({
   applicationDefault: vi.fn(),
+  cert: vi.fn(),
   getApps: () => [],
   initializeApp: vi.fn(),
 }));
 vi.mock('firebase-admin/auth', () => ({ getAuth: () => admin }));
 
-describe('FirebaseService', () => {
-  let service: FirebaseService;
+describe('FirebaseAdminService', () => {
+  let service: FirebaseAdminService;
   const fetchMock = vi.fn();
 
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('fetch', fetchMock);
-    service = new FirebaseService(
-      new ConfigService({
-        FIREBASE_PROJECT_ID: 'test-project',
-        FIREBASE_WEB_API_KEY: 'test-key',
-      }),
-    );
+    vi.stubEnv('FIREBASE_PROJECT_ID', 'test-project');
+    vi.stubEnv('FIREBASE_WEB_API_KEY', 'test-key');
+    vi.stubEnv('FIREBASE_SERVICE_ACCOUNT_BASE64', '');
+    vi.stubEnv('FIREBASE_CLIENT_EMAIL', '');
+    vi.stubEnv('FIREBASE_PRIVATE_KEY', '');
+    service = new FirebaseAdminService();
+    service.onModuleInit();
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
 
   it('verifies signatures and checks revocation/disabled users', async () => {
     admin.verifyIdToken.mockResolvedValue({ uid: 'user' });
