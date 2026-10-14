@@ -56,6 +56,30 @@ The S3 endpoint is `http://localhost:9000`. Open the MinIO console at
 `http://localhost:9001` and sign in with the credentials from `.env`.
 Data persists in the `miniodata` Docker volume.
 
+Set `S3_ENDPOINT=http://localhost:9000` and `S3_FORCE_PATH_STYLE=true` in `.env`,
+then run `npm run storage:init` to ensure the media, video, and payment-slip
+buckets exist. Restart the API after changing environment variables. The endpoint
+must also be reachable by the browser using signed URLs; use your reachable
+storage hostname when testing from another device.
+
+Image, audio, and payment-slip uploads use `multipart/form-data` with the file
+field named `file`. Let the browser set the multipart boundary automatically.
+Video uploads use three steps:
+
+1. POST `/api/v1/admin/episodes/:id/video/upload-url` with `{"ext":"mp4"}`.
+2. PUT the raw file bytes to the returned `uploadUrl`, using the returned
+   `headers` exactly. Do not attach the API's Firebase bearer token to this PUT.
+3. POST `/api/v1/admin/episodes/:id/video` with the returned `storageKey` and
+   the video's `durationSec`.
+
+Signed media URLs expire after one hour; fetch the API resource again to refresh
+them. For flashcards, `audioUrl` is optional: omitting it on update preserves the
+current value, while `null` or a blank string clears it.
+
+Run `RUN_STORAGE_TESTS=1 npm run test:platform` after building to verify storage
+uploads, signed downloads, and browser preflight. These checks clean up their
+temporary files afterward.
+
 MinIO is built from the pinned source release in `docker/minio/Dockerfile` because
 the former prebuilt image is unavailable. The first build requires internet
 access and can take several minutes.

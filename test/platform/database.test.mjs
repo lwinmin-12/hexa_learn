@@ -79,6 +79,7 @@ suite('learning API with isolated PostgreSQL schema', () => {
       .overrideProvider(StorageService)
       .useValue({
         get: async () => 'https://signed.example/video?signature=private',
+        mediaUrl: async () => 'https://signed.example/media?signature=private',
         head: async () => ({}),
         put: async (_bucket, key) => key,
         putUrl: async () => 'https://signed.example/put',
@@ -300,14 +301,11 @@ suite('learning API with isolated PostgreSQL schema', () => {
       },
     });
     const create = () =>
-      http()
-        .post('/api/v1/payments')
-        .set(headers)
-        .send({
-          courseId: premium.id,
-          paymentMethodId: method.id,
-          promoCode: promo.code,
-        });
+      http().post('/api/v1/payments').set(headers).send({
+        courseId: premium.id,
+        paymentMethodId: method.id,
+        promoCode: promo.code,
+      });
     const first = await create().expect(201),
       second = await create().expect(201);
     expect(first.body.finalAmount).toBe('90');
@@ -496,5 +494,80 @@ suite('learning API with isolated PostgreSQL schema', () => {
       .get(`/api/v1/admin/courses/${course.id}/stats`)
       .set('Authorization', 'Bearer other-admin')
       .expect(404);
+  });
+  it('accepts multipart cover/audio/slip uploads and confirms a signed video', async () => {
+    const auth = { Authorization: 'Bearer owner' };
+    const image = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY9sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    const cover = await http()
+      .post(`/api/v1/admin/courses/${course.id}/cover`)
+      .set(auth)
+      .attach('file', image, {
+        filename: 'cover.png',
+        contentType: 'image/png',
+      })
+      .expect(201);
+    expect(cover.body.coverUrl).toContain('signature=');
+    const detail = await http()
+      .get(`/api/v1/admin/courses/${course.id}`)
+      .set(auth)
+      .expect(200);
+    expect(detail.body.coverUrl).toContain('signature=');
+    await http()
+      .post(`/api/v1/admin/chapters/${chapter.id}/audio`)
+      .set(auth)
+      .field('title', 'Vocabulary')
+      .field('type', 'vocab')
+      .attach('file', Buffer.from('ID3test audio'), {
+        filename: 'audio.mp3',
+        contentType: 'audio/mpeg',
+      })
+      .expect(201);
+    const url = await http()
+      .post(`/api/v1/admin/episodes/${episode.id}/video/upload-url`)
+      .set(auth)
+      .send({ ext: 'mp4' })
+      .expect(201);
+    expect(url.body.headers).toEqual({ 'Content-Type': 'video/mp4' });
+    expect(url.body.storageKey).toBe(url.body.key);
+    await http()
+      .post(`/api/v1/admin/episodes/${episode.id}/video`)
+      .set(auth)
+      .send({ storageKey: url.body.key, durationSec: 100 })
+      .expect(201);
+    const pending = await db.payment.findFirst({
+      where: { userId: learner.id, status: 'slip_uploaded' },
+    });
+    await db.payment.update({
+      where: { id: pending.id },
+      data: { status: 'rejected' },
+    });
+    await http()
+      .post(`/api/v1/payments/${pending.id}/slip`)
+      .set(headers)
+      .attach('file', image, { filename: 'slip.png', contentType: 'image/png' })
+      .expect(201);
+  });
+  it('creates flashcards without audio and clears existing audio with a blank value', async () => {
+    const auth = { Authorization: 'Bearer owner' };
+    const card = await http()
+      .post(`/api/v1/admin/chapters/${chapter.id}/flashcards`)
+      .set(auth)
+      .send({ frontText: 'Hello', backText: 'Bonjour' })
+      .expect(201);
+    expect(card.body.audioUrl).toBeNull();
+    await http()
+      .patch(`/api/v1/admin/flashcards/${card.body.id}`)
+      .set(auth)
+      .send({ audioUrl: 'https://example.com/audio.mp3' })
+      .expect(200);
+    const cleared = await http()
+      .patch(`/api/v1/admin/flashcards/${card.body.id}`)
+      .set(auth)
+      .send({ audioUrl: '' })
+      .expect(200);
+    expect(cleared.body.audioUrl).toBeNull();
   });
 });

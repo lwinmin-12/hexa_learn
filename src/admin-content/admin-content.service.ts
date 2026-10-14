@@ -1,15 +1,26 @@
-import {Inject, Injectable} from '@nestjs/common';
-import {Prisma, User} from '@prisma/client';
-import {randomUUID} from 'node:crypto';
-import {PrismaService} from '../prisma/prisma.service.js';
-import {OwnershipService} from '../platform/ownership.service.js';
-import {StorageService, Bucket} from '../platform/storage.service.js';
-import {JobsService} from '../platform/jobs.service.js';
-import {fail, paging, listed} from '../platform/common.js';
-import {serial} from '../platform/transaction.js';
-import {imageFile} from '../platform/uploads.js';
-import {reorderRows} from '../platform/reorder.js';
-import {AdminCourseQuery, CourseDto, UpdateCourseDto, ChapterDto, UpdateChapterDto, EpisodeDto, UpdateEpisodeDto, ReorderDto, UploadVideoDto, ConfirmVideoDto} from './admin-content.dto.js';
+import { Inject, Injectable } from '@nestjs/common';
+import { Prisma, User } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { OwnershipService } from '../platform/ownership.service.js';
+import { StorageService, Bucket } from '../platform/storage.service.js';
+import { JobsService } from '../platform/jobs.service.js';
+import { fail, paging, listed } from '../platform/common.js';
+import { serial } from '../platform/transaction.js';
+import { imageFile } from '../platform/uploads.js';
+import { reorderRows } from '../platform/reorder.js';
+import {
+  AdminCourseQuery,
+  CourseDto,
+  UpdateCourseDto,
+  ChapterDto,
+  UpdateChapterDto,
+  EpisodeDto,
+  UpdateEpisodeDto,
+  ReorderDto,
+  UploadVideoDto,
+  ConfirmVideoDto,
+} from './admin-content.dto.js';
 const mediaType = {
   mp4: 'video/mp4',
   mov: 'video/quicktime',
@@ -40,11 +51,15 @@ export class AdminContentService {
       }),
       this.db.course.count({ where }),
     ]);
-    return listed(data, total, q);
+    return listed(
+      await Promise.all(data.map((course) => this.presentCourse(course))),
+      total,
+      q,
+    );
   }
   async detail(user: User, id: string) {
     await this.scope.check(user, 'course', id);
-    return this.db.course.findUniqueOrThrow({
+    const course = await this.db.course.findUniqueOrThrow({
       where: { id },
       include: {
         chapters: {
@@ -53,6 +68,17 @@ export class AdminContentService {
         },
       },
     });
+    return this.presentCourse(course);
+  }
+  private async presentCourse<T extends { coverUrl: string | null }>(
+    course: T,
+  ) {
+    return {
+      ...course,
+      coverUrl: course.coverUrl
+        ? await this.storage.mediaUrl(course.coverUrl)
+        : null,
+    };
   }
   private premium(
     isPremium: boolean,
@@ -132,7 +158,7 @@ export class AdminContentService {
       await this.jobs.add('storage-cleanup', {
         objects: [{ bucket: 'MEDIA', key: old.coverUrl }],
       });
-    return result;
+    return { ...result, coverUrl: await this.storage.mediaUrl(key) };
   }
   async chapter(user: User, id: string, dto: ChapterDto) {
     await this.scope.check(user, 'course', id);
@@ -249,6 +275,9 @@ export class AdminContentService {
     return {
       key,
       uploadUrl: await this.storage.putUrl('VIDEOS', key, mediaType[dto.ext]),
+      storageKey: key,
+      method: 'PUT',
+      headers: { 'Content-Type': mediaType[dto.ext] },
       expiresIn: 900,
     };
   }
