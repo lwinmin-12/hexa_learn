@@ -124,6 +124,38 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Japanese learning demo data
+
+Migration `20261017000000_japanese_learning_demo` adds three free, published
+courses covering kana, JLPT N5 grammar, and everyday conversation. It includes
+6 chapters, 12 published lessons with text descriptions, 36 Japanese/English
+flashcards, and 6 chapter quizzes with 12 questions and 48 answer options.
+Each question has exactly one correct answer and awards one point. Each quiz
+requires both answers to be correct to reach its two-point pass score.
+
+The migration also adds one demo teacher with the `page_admin` role, two demo
+learners, 4 active enrollments with zero progress, 3 course channels,
+7 channel memberships, 3 messages, and 4 unread notifications.
+The accounts use `example.com` email addresses and dummy Firebase UIDs.
+They do not create Firebase users or provide login credentials. Use your own
+Firebase account to access authenticated endpoints.
+
+No media assets are included. Lessons have no playable video, and flashcards
+have no audio. Upload real media through the admin API before testing playback.
+No payments, bank details, quiz attempts, certificates, or completed progress
+are inserted.
+
+Run `npm run db:migrate` to apply pending migrations to the configured database.
+Docker's setup service also applies this migration during
+`docker compose up -d --build`. Prisma records it once; subsequent runs keep
+existing data. PostgreSQL generates every demo ID with `gen_random_uuid()` during the migration.
+The migration reuses those IDs for related rows. The inserts run in one
+transaction and fail on unique-key collisions instead of overwriting records.
+
+This is a committed data migration, so it also inserts the demo content and
+accounts in production databases when deployed. Review that impact before
+running migrations against production.
+
 ## Firebase authentication and profile API
 
 Set `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY`, and
