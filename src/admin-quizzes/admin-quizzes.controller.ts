@@ -4,6 +4,7 @@ import type { User } from '@prisma/client';
 import {CurrentUser, Protected, PageDto} from '../platform/common.js';
 import {AdminQuizzesService} from './admin-quizzes.service.js';
 import {QuizDto, UpdateQuizDto, QuestionDto, UpdateQuestionDto, OptionDto, UpdateOptionDto} from './admin-quizzes.dto.js';
+import {GlobalQuizQueryDto} from './global-quiz-query.dto.js';
 import {ReorderDto} from '../admin-content/admin-content.dto.js';
 @Controller()
 @Protected('admin-quizzes', 'super_admin', 'page_admin')
@@ -11,6 +12,20 @@ export class AdminQuizzesController {
   constructor(
     @Inject(AdminQuizzesService) private readonly service: AdminQuizzesService,
   ) {}
+  @Get('admin/courses/:courseId/quizzes')
+  @ApiOperation({ summary: 'GET admin/courses/:courseId/quizzes' })
+  list(
+    @CurrentUser() user: User,
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+    @Query() q: PageDto,
+  ) {
+    return this.service.list(user, courseId, q);
+  }
+  @Get('admin/quizzes')
+  @ApiOperation({ summary: 'GET admin/quizzes' })
+  listAll(@CurrentUser() user: User, @Query() q: GlobalQuizQueryDto) {
+    return this.service.listAll(user, q);
+  }
   @Post('admin/quizzes')
   @ApiOperation({ summary: 'POST admin/quizzes' })
   create(@CurrentUser() user: User, @Body() dto: QuizDto) {

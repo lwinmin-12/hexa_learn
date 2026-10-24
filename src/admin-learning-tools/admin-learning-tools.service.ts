@@ -124,7 +124,11 @@ export class AdminLearningToolsService {
       }),
       this.db.audioTrack.count({ where }),
     ]);
-    return listed(data, total, q);
+    return listed(
+      await Promise.all(data.map((track) => this.presentAudio(track))),
+      total,
+      q,
+    );
   }
   async createAudio(
     user: User,
@@ -147,7 +151,7 @@ export class AdminLearningToolsService {
       fail(400, 'INVALID_AUDIO', 'File is not MP3 audio');
     const key = `courses/${c.id}/chapters/${id}/audio/${randomUUID()}.mp3`;
     await this.storage.put('MEDIA', key, b, 'audio/mpeg');
-    return serial(this.db, async (tx) => {
+    const track = await serial(this.db, async (tx) => {
       const max = await tx.audioTrack.aggregate({
         where: { chapterId: id },
         _max: { position: true },
@@ -161,10 +165,15 @@ export class AdminLearningToolsService {
         },
       });
     });
+    return this.presentAudio(track);
   }
   async updateAudio(user: User, id: string, dto: UpdateAudioDto) {
     await this.scope.check(user, 'audio', id);
-    return this.db.audioTrack.update({ where: { id }, data: dto });
+    const track = await this.db.audioTrack.update({ where: { id }, data: dto });
+    return this.presentAudio(track);
+  }
+  private async presentAudio<T extends { audioUrl: string }>(track: T) {
+    return { ...track, audioUrl: await this.storage.mediaUrl(track.audioUrl) };
   }
   async deleteAudio(user: User, id: string) {
     await this.scope.check(user, 'audio', id);

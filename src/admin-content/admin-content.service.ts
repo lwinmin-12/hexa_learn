@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma, User } from '@prisma/client';
+import { Episode, Prisma, User } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { OwnershipService } from '../platform/ownership.service.js';
@@ -68,7 +68,54 @@ export class AdminContentService {
         },
       },
     });
-    return this.presentCourse(course);
+    return this.presentCourse({
+      ...course,
+      chapters: await Promise.all(
+        course.chapters.map(async (chapter) => ({
+          ...chapter,
+          episodes: await Promise.all(
+            chapter.episodes.map((episode) => this.presentEpisode(episode)),
+          ),
+        })),
+      ),
+    });
+  }
+  async episodeDetail(user: User, id: string) {
+    await this.scope.check(user, 'episode', id);
+    return this.presentEpisode(
+      await this.db.episode.findUniqueOrThrow({ where: { id } }),
+    );
+  }
+  private async presentEpisode(episode: Episode) {
+    const { videoUrl, ...result } = episode;
+    return {
+      ...result,
+      playbackUrl:
+        episode.videoUploadStatus === 'ready' && videoUrl
+          ? await this.storage.get('VIDEOS', videoUrl)
+          : null,
+    };
+  }
+  private validateSchedule(
+    dto: {
+      publishAt?: string | null;
+      scheduledAt?: string | null;
+      status?: Episode['status'];
+    },
+    old?: Episode,
+  ) {
+    const publishAt =
+      dto.publishAt === undefined ? old?.publishAt : dto.publishAt;
+    for (const value of [dto.publishAt, dto.scheduledAt, dto.status === 'scheduled' && old?.status !== 'scheduled' ? publishAt : null]) {
+      if (value && new Date(value).getTime() < Date.now() - 60_000)
+        fail(
+          400,
+          'SCHEDULE_IN_PAST',
+          'Schedule must not be more than 60 seconds in the past',
+        );
+    }
+    if ((dto.status ?? old?.status) === 'scheduled' && !publishAt)
+      fail(400, 'PUBLISH_AT_REQUIRED', 'Scheduled episodes require publishAt');
   }
   private async presentCourse<T extends { coverUrl: string | null }>(
     course: T,
@@ -178,7 +225,8 @@ export class AdminContentService {
   }
   async episode(user: User, id: string, dto: EpisodeDto) {
     await this.scope.check(user, 'chapter', id);
-    return serial(this.db, async (tx) => {
+    this.validateSchedule(dto);
+    const result = await serial(this.db, async (tx) => {
       const max = await tx.episode.aggregate({
         where: { chapterId: id },
         _max: { position: true },
@@ -187,10 +235,19 @@ export class AdminContentService {
         data: { ...dto, chapterId: id, position: (max._max.position ?? 0) + 1 },
       });
     });
+    return this.presentEpisode(result);
   }
   async updateEpisode(user: User, id: string, dto: UpdateEpisodeDto) {
     await this.scope.check(user, 'episode', id);
-    return this.db.episode.update({ where: { id }, data: dto });
+    const old = await this.db.episode.findUniqueOrThrow({ where: { id } });
+    this.validateSchedule(dto, old);
+    const { scheduledAt, ...data } = dto;
+    return this.presentEpisode(
+      await this.db.episode.update({
+        where: { id },
+        data: { ...data, videoScheduledAt: scheduledAt },
+      }),
+    );
   }
   async reorder(
     user: User,
@@ -291,24 +348,26 @@ export class AdminContentService {
       )
     )
       fail(400, 'INVALID_STORAGE_KEY', 'Key must be issued for this episode');
+    const old = await this.db.episode.findUniqueOrThrow({ where: { id } });
+    this.validateSchedule(dto, old);
     const object = await this.storage.head('VIDEOS', dto.storageKey);
     if (object.ContentLength === 0)
       fail(400, 'EMPTY_VIDEO', 'Video must not be empty');
-    const old = await this.db.episode.findUniqueOrThrow({ where: { id } });
     const result = await this.db.episode.update({
       where: { id },
       data: {
         videoUrl: dto.storageKey,
         videoDurationSec: dto.durationSec,
         videoUploadStatus: 'ready',
-        videoScheduledAt: dto.scheduledAt ?? null,
+        videoScheduledAt: dto.scheduledAt,
+        publishAt: dto.publishAt,
       },
     });
     if (old.videoUrl && old.videoUrl !== dto.storageKey)
       await this.jobs.add('storage-cleanup', {
         objects: [{ bucket: 'VIDEOS', key: old.videoUrl }],
       });
-    return result;
+    return this.presentEpisode(result);
   }
   async removeVideo(user: User, id: string) {
     await this.scope.check(user, 'episode', id);
@@ -326,6 +385,6 @@ export class AdminContentService {
       await this.jobs.add('storage-cleanup', {
         objects: [{ bucket: 'VIDEOS', key: e.videoUrl }],
       });
-    return result;
+    return this.presentEpisode(result);
   }
 }

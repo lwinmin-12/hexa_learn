@@ -9,7 +9,7 @@ export class PublishingService {
     @Inject(PrismaService) private readonly db: PrismaService,
     @Inject(JobsService) private readonly jobs: JobsService,
   ) {}
-  @Cron('* * * * *')
+  @Cron('* * * * *', { timeZone: 'UTC' })
   async publish() {
     const key = 'hexa:publish-lock',
       token = randomUUID();

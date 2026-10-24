@@ -31,7 +31,7 @@ try {
       await client.send(new CreateBucketCommand({ Bucket }));
     }
     console.log(`${type} bucket ready`);
-    const origins = process.env.S3_CORS_ORIGINS?.split(',')
+    const origins = (process.env.S3_CORS_ORIGINS ?? process.env.DASHBOARD_ORIGINS)?.split(',')
       .map((s) => s.trim())
       .filter(Boolean);
     if (origins?.length) {
@@ -46,7 +46,7 @@ try {
                   AllowedOrigins: origins,
                   AllowedMethods: ['GET', 'HEAD', 'PUT'],
                   AllowedHeaders: ['*'],
-                  ExposeHeaders: ['ETag'],
+                  ExposeHeaders: ['ETag', 'Accept-Ranges', 'Content-Range', 'Content-Length'],
                   MaxAgeSeconds: 3600,
                 },
               ],

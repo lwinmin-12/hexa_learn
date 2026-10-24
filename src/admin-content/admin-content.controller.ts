@@ -103,6 +103,11 @@ export class AdminContentController {
   ) {
     return this.service.episode(user, id, dto);
   }
+  @Get('admin/episodes/:id')
+  @ApiOperation({ summary: 'GET admin/episodes/:id' })
+  episodeDetail(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.episodeDetail(user, id);
+  }
   @Patch('admin/episodes/:id')
   @ApiOperation({ summary: 'PATCH admin/episodes/:id' })
   updateEpisode(

@@ -7,6 +7,7 @@ live(
   'uploads, confirms and reads private media, slips and browser PUT videos in MinIO',
   async () => {
     const storage = new StorageService();
+    const origin = (process.env.S3_CORS_ORIGINS ?? process.env.DASHBOARD_ORIGINS ?? 'http://localhost:5173').split(',')[0].trim();
     const prefix = `integration-tests/${randomUUID()}`;
     const created = [];
     try {
@@ -32,7 +33,7 @@ live(
       const preflight = await fetch(signed, {
         method: 'OPTIONS',
         headers: {
-          Origin: 'http://localhost:3000',
+          Origin: origin,
           'Access-Control-Request-Method': 'PUT',
           'Access-Control-Request-Headers': 'content-type',
         },
@@ -52,6 +53,21 @@ live(
       const get = await fetch(await storage.get('VIDEOS', key));
       expect(get.status).toBe(200);
       expect(Buffer.from(await get.arrayBuffer())).toEqual(bytes);
+      const playbackUrl = await storage.get('VIDEOS', key);
+      const rangePreflight = await fetch(playbackUrl, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: origin,
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'range',
+        },
+      });
+      expect(rangePreflight.status).toBeLessThan(400);
+      expect(rangePreflight.headers.get('access-control-allow-origin')).toBe(origin);
+      const range = await fetch(playbackUrl, { headers: { Origin: origin, Range: 'bytes=0-3' } });
+      expect(range.status).toBe(206);
+      expect(range.headers.get('content-range')).toBe(`bytes 0-3/${bytes.length}`);
+      expect(Buffer.from(await range.arrayBuffer())).toEqual(bytes.subarray(0, 4));
     } finally {
       for (const [bucket, key] of created) await storage.delete(bucket, key);
       storage.onModuleDestroy();

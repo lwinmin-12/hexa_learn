@@ -50,6 +50,7 @@
   ["DELETE", "/admin/chapters/:id"],
   ["PUT", "/admin/courses/:id/chapters/reorder"],
   ["POST", "/admin/chapters/:id/episodes"],
+  ["GET", "/admin/episodes/:id"],
   ["PATCH", "/admin/episodes/:id"],
   ["DELETE", "/admin/episodes/:id"],
   ["PUT", "/admin/chapters/:id/episodes/reorder"],

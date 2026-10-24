@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  Inject,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, Inject, Post } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/auth.dto.js';
 import {
@@ -14,8 +7,6 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { CurrentAuth, FirebaseAuthGuard } from './guard/auth.guard.js';
-import type { AuthContext } from './guard/auth.guard.js';
 @Controller('auth')
 @ApiTags('Authentication')
 @ApiUnauthorizedResponse({

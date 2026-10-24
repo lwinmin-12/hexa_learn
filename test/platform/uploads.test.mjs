@@ -56,6 +56,7 @@ it.each(['', 'http://localhost:9000'])('signs browser URLs with public endpoint 
     const download = new URL(await storage.get('VIDEOS', 'video.mp4'));
     expect(download.host).toBe(url.host);
     expect(download.searchParams.has('X-Amz-Signature')).toBe(true);
+    expect(download.searchParams.get('X-Amz-Expires')).toBe('3600');
     expect(url.pathname).toBe('/videos/video.mp4');
     expect(url.searchParams.has('x-amz-checksum-crc32')).toBe(false);
     expect(url.searchParams.get('X-Amz-SignedHeaders')).toContain(

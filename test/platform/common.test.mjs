@@ -36,3 +36,19 @@ it('hides another page admin course with 404', async () => {
     scope.check({ id: 'pa', role: 'page_admin' }, 'course', 'course'),
   ).rejects.toMatchObject({ status: 404 });
 });
+
+it('allows pre-provisioned admins without learner phone onboarding', () => {
+  const guard = new RolesGuard({ getAllAndOverride: () => ['super_admin', 'page_admin'] });
+  for (const role of ['super_admin', 'page_admin']) {
+    expect(guard.canActivate({
+      switchToHttp: () => ({ getRequest: () => ({ auth: { user: { role, phoneVerifiedAt: null } } }) }),
+      getHandler: () => null,
+      getClass: () => null,
+    })).toBe(true);
+  }
+  expect(() => guard.canActivate({
+    switchToHttp: () => ({ getRequest: () => ({ auth: { user: { role: 'learner', phoneVerifiedAt: new Date() } } }) }),
+    getHandler: () => null,
+    getClass: () => null,
+  })).toThrow('Role is not permitted');
+});

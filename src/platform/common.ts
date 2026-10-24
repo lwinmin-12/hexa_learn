@@ -46,7 +46,7 @@ export class RolesGuard implements CanActivate {
   constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
   canActivate(ctx: ExecutionContext) {
     const user = ctx.switchToHttp().getRequest<AuthRequest>().auth.user;
-    if (!user.phoneVerifiedAt)
+    if (user.role === 'learner' && !user.phoneVerifiedAt)
       fail(
         403,
         'PHONE_NOT_VERIFIED',

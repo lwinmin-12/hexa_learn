@@ -105,6 +105,31 @@ Signed media URLs expire after one hour; fetch the API resource again to refresh
 them. For flashcards, `audioUrl` is optional: omitting it on update preserves the
 current value, while `null` or a blank string clears it.
 
+GET `/api/v1/admin/episodes/:id` and the episodes nested in GET
+`/api/v1/admin/courses/:id` return `playbackUrl`. Ready videos receive a signed
+GET URL valid for one hour, including future scheduled videos for admin preview.
+Episode responses omit the stored `videoUrl` key. The upload handshake still
+returns `storageKey` for upload confirmation.
+
+Episode PATCH and video confirmation accept nullable UTC `publishAt` and
+`scheduledAt`, such as `2026-10-23T06:44:00.000Z`. Omitted fields preserve
+their value. `scheduledAt` updates `videoScheduledAt`. `publishAt` controls
+episode publication; `videoScheduledAt` independently controls learner playback.
+New schedules older than 60 seconds return `SCHEDULE_IN_PAST`. Scheduled
+episodes require `publishAt`. The publisher runs every minute in UTC.
+
+Storage CORS uses `S3_CORS_ORIGINS`, falling back to `DASHBOARD_ORIGINS`.
+Set this comma-separated list to your admin web origins and run
+`npm run storage:init`. The rule allows GET, HEAD, PUT and all request headers,
+including Range. It exposes ETag, Accept-Ranges, Content-Range, and Content-Length
+for 3600 seconds. Compose also sets MinIO's `MINIO_API_CORS_ALLOW_ORIGIN`.
+Recreate MinIO after changing that setting.
+
+The existing schedule columns are `timestamp(3)` without a time zone. The API
+preserves UTC instants and milliseconds, but native `timestamptz` needs a future
+Prisma `@db.Timestamptz(3)` change and a migration interpreting existing values
+as UTC. This change does not alter the Prisma schema or database types.
+
 Run `RUN_STORAGE_TESTS=1 npm run test:platform` after building to verify storage
 uploads, signed downloads, and browser preflight. These checks clean up their
 temporary files afterward.
@@ -343,3 +368,7 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+## Admin dashboard login
+
+Follow [Run the admin dashboard with the API](../ADMIN_SETUP.md) to enable email-and-password login and create admin accounts with `npm run admin:create`.

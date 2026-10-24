@@ -144,6 +144,44 @@ suite('learning API with isolated PostgreSQL schema', () => {
     }
   });
   const http = () => request(app.getHttpServer());
+  it('admin episode playback and UTC scheduling persist through HTTP and PostgreSQL', async () => {
+    const auth = { Authorization: 'Bearer owner' };
+    const created = await db.episode.create({ data: {
+      chapterId: chapter.id, title: 'Admin preview', position: 91,
+    } });
+    const path = `/api/v1/admin/episodes/${created.id}`;
+    const pending = await http().get(path).set(auth).expect(200);
+    expect(pending.body.playbackUrl).toBeNull();
+    expect(pending.body).not.toHaveProperty('videoUrl');
+    const publishAt = '2099-10-23T06:44:00.000Z';
+    const scheduledAt = '2099-10-23T06:45:37.123Z';
+    const patch = await http().patch(path).set(auth).send({ status: 'scheduled', publishAt, scheduledAt }).expect(200);
+    expect(patch.body).toMatchObject({ publishAt, videoScheduledAt: scheduledAt });
+    const saved = await db.episode.findUniqueOrThrow({ where: { id: created.id } });
+    expect(saved.publishAt.toISOString()).toBe(publishAt);
+    expect(saved.videoScheduledAt.toISOString()).toBe(scheduledAt);
+    const storageKey = `courses/${course.id}/episodes/${created.id}/${randomUUID()}.mp4`;
+    const confirmed = await http().post(`${path}/video`).set(auth).send({ storageKey, durationSec: 85 }).expect(201);
+    expect(confirmed.body).toMatchObject({ publishAt, videoScheduledAt: scheduledAt, videoUploadStatus: 'ready', playbackUrl: expect.stringContaining('https://signed.example/') });
+    expect(confirmed.body).not.toHaveProperty('videoUrl');
+    const detail = await http().get(path).set(auth).expect(200);
+    expect(detail.body).toMatchObject({ publishAt, videoScheduledAt: scheduledAt, playbackUrl: confirmed.body.playbackUrl });
+    const content = await http().get(`/api/v1/admin/courses/${course.id}`).set(auth).expect(200);
+    expect(content.body.chapters.flatMap((row) => row.episodes).find((row) => row.id === created.id)).toMatchObject({ playbackUrl: confirmed.body.playbackUrl });
+    expect(JSON.stringify(content.body)).not.toContain('videoUrl');
+    const clear = await http().patch(path).set(auth).send({ status: 'draft', publishAt: null, scheduledAt: null }).expect(200);
+    expect(clear.body).toMatchObject({ publishAt: null, videoScheduledAt: null });
+    for (const body of [{ publishAt: '2000-01-01T00:00:00.000Z' }, { scheduledAt: '2000-01-01T00:00:00.000Z' }]) {
+      const rejected = await http().patch(path).set(auth).send(body).expect(400);
+      expect(rejected.body.code).toBe('SCHEDULE_IN_PAST');
+    }
+    const noPublish = await http().patch(path).set(auth).send({ status: 'scheduled' }).expect(400);
+    expect(noPublish.body.code).toBe('PUBLISH_AT_REQUIRED');
+    await db.user.create({ data: { firebaseUid: 'preview-other-admin', provider: 'google', role: 'page_admin' } });
+    await http().get(path).set('Authorization', 'Bearer preview-other-admin').expect(404);
+    await db.user.create({ data: { firebaseUid: 'preview-super-admin', provider: 'google', role: 'super_admin' } });
+    await http().get(path).set('Authorization', 'Bearer preview-super-admin').expect(200);
+  });
   it('hides unpublished and future content', async () => {
     const draft = await db.course.create({
       data: { ownerId: owner.id, title: 'Draft', slug: 'draft' },

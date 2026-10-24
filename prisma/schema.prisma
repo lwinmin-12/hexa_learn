@@ -12,6 +12,7 @@ datasource db {
 // ───────────── ENUMS ─────────────
 
 enum AuthProvider {
+  password
   google
   apple
   facebook
@@ -242,6 +243,7 @@ model AudioTrack {
 model Quiz {
   id           String  @id @default(uuid()) @db.Uuid
   title        String
+  createdAt    DateTime @default(now()) @map("created_at")
   passScore    Int     @map("pass_score")
   timeLimitSec Int?    @map("time_limit_sec")
   courseId     String? @map("course_id") @db.Uuid
