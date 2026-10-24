@@ -62,17 +62,21 @@ export class AdminContentService {
     const course = await this.db.course.findUniqueOrThrow({
       where: { id },
       include: {
+        _count: { select: { books: true } },
         chapters: {
           orderBy: { position: 'asc' },
-          include: { episodes: { orderBy: { position: 'asc' } } },
+          include: { episodes: { orderBy: { position: 'asc' } }, _count: { select: { books: true } } },
         },
       },
     });
+    const { _count, ...content } = course;
     return this.presentCourse({
-      ...course,
+      ...content,
+      bookCount: _count.books + course.chapters.reduce((total, chapter) => total + chapter._count.books, 0),
       chapters: await Promise.all(
-        course.chapters.map(async (chapter) => ({
+        course.chapters.map(async ({ _count, ...chapter }) => ({
           ...chapter,
+          bookCount: _count.books,
           episodes: await Promise.all(
             chapter.episodes.map((episode) => this.presentEpisode(episode)),
           ),
@@ -282,6 +286,13 @@ export class AdminContentService {
     await this.scope.check(user, kind, id);
     const objects = await serial(this.db, async (tx) => {
       const out: { bucket: Bucket; key: string }[] = [];
+      if (kind !== 'episode') {
+        const books = await tx.book.findMany({
+          where: kind === 'course' ? { OR: [{ courseId: id }, { chapter: { courseId: id } }] } : { chapterId: id },
+          select: { fileKey: true },
+        });
+        out.push(...books.map(({ fileKey }) => ({ bucket: 'BOOKS' as const, key: fileKey })));
+      }
       const chapters = await tx.chapter.findMany({
         where:
           kind === 'course'

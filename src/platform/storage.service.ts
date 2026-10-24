@@ -7,8 +7,10 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { fail } from './common.js';
-export type Bucket = 'VIDEOS' | 'MEDIA' | 'SLIPS';
+export type Bucket = 'VIDEOS' | 'MEDIA' | 'SLIPS' | 'BOOKS';
 
 @Injectable()
 export class StorageService implements OnModuleDestroy {
@@ -69,12 +71,25 @@ export class StorageService implements OnModuleDestroy {
       : this.get('MEDIA', key);
   }
 
-  async get(type: Bucket, key: string) {
+  async get(
+    type: Bucket,
+    key: string,
+    options: {
+      expiresIn?: number;
+      contentDisposition?: string;
+      contentType?: string;
+    } = {},
+  ) {
     try {
       return await getSignedUrl(
         this.signingClient,
-        new GetObjectCommand({ Bucket: this.bucket(type), Key: key }),
-        { expiresIn: 3600 },
+        new GetObjectCommand({
+          Bucket: this.bucket(type),
+          Key: key,
+          ResponseContentDisposition: options.contentDisposition,
+          ResponseContentType: options.contentType,
+        }),
+        { expiresIn: options.expiresIn ?? 3600 },
       );
     } catch (error) {
       return this.storageError(error);
@@ -110,6 +125,29 @@ export class StorageService implements OnModuleDestroy {
       return key;
     } catch (error) {
       return this.storageError(error);
+    }
+  }
+
+  async putFile(type: Bucket, key: string, path: string, contentType: string) {
+    let stream: ReturnType<typeof createReadStream> | undefined;
+    try {
+      const { size } = await stat(path);
+      stream = createReadStream(path);
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket(type),
+          Key: key,
+          Body: stream,
+          ContentType: contentType,
+          ContentLength: size,
+        }),
+        { requestTimeout: 300000 },
+      );
+      return key;
+    } catch (error) {
+      return this.storageError(error);
+    } finally {
+      stream?.destroy();
     }
   }
 

@@ -372,3 +372,8 @@ Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
 ## Admin dashboard login
 
 Follow [Run the admin dashboard with the API](../ADMIN_SETUP.md) to enable email-and-password login and create admin accounts with `npm run admin:create`.
+
+## Course and chapter books
+
+See [Books API](docs/books.md) for single-request PDF uploads, permissions,
+migration SQL, endpoint responses, private storage, and proxy limits.

@@ -14,11 +14,20 @@ export type Target =
   | 'channel'
   | 'message'
   | 'payment'
+  | 'book'
   | 'promo';
 @Injectable()
 export class OwnershipService {
   constructor(@Inject(PrismaService) private readonly db: PrismaService) {}
   async courseId(kind: Target, id: string): Promise<string> {
+    if (kind === 'book') {
+      const book = await this.db.book.findUnique({
+        where: { id },
+        select: { courseId: true, chapterId: true },
+      });
+      if (!book) fail(404, 'NOT_FOUND', 'Book not found');
+      return book.courseId ?? this.courseId('chapter', book.chapterId!);
+    }
     if (kind === 'course') {
       const c = await this.db.course.findUnique({
         where: { id },

@@ -48,7 +48,8 @@ function fixture(overrides = {}) {
       ),
       findUniqueOrThrow: jest.fn(async () => ({
         coverUrl: null,
-        chapters: [{ episodes: [row] }],
+        _count: { books: 0 },
+        chapters: [{ _count: { books: 0 }, episodes: [row] }],
       })),
     },
   };

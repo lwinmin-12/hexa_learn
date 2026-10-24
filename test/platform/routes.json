@@ -102,5 +102,18 @@
   ["GET", "/admin/dashboard/top-courses"],
   ["GET", "/admin/courses/:id/learners"],
   ["GET", "/admin/courses/:id/stats"],
-  ["GET", "/admin/scheduled-content"]
+  ["GET", "/admin/scheduled-content"],
+  ["POST", "/admin/courses/:id/books"],
+  ["POST", "/admin/chapters/:id/books"],
+  ["GET", "/admin/courses/:id/books"],
+  ["GET", "/admin/books/:id"],
+  ["PATCH", "/admin/books/:id"],
+  ["PUT", "/admin/books/:id/file"],
+  ["DELETE", "/admin/books/:id"],
+  ["PUT", "/admin/courses/:id/books/reorder"],
+  ["PUT", "/admin/chapters/:id/books/reorder"],
+  ["GET", "/courses/:id/books"],
+  ["GET", "/chapters/:id/books"],
+  ["GET", "/books/:id/view"],
+  ["GET", "/books/:id/download"]
 ]

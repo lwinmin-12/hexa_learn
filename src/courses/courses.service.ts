@@ -6,6 +6,14 @@ import {StorageService} from '../platform/storage.service.js';
 import {serial} from '../platform/transaction.js';
 import {CourseQuery} from './courses.dto.js';
 import {LearningAccessService} from './access.service.js';
+import type {Prisma} from '@prisma/client';
+const bookCounts = {
+  _count: { select: { books: { where: { status: 'published' as const } } } },
+  chapters: {
+    where: { status: 'published' as const },
+    select: { _count: { select: { books: { where: { status: 'published' as const } } } } },
+  },
+};
 export const episodeOutline = {
   id: true,
   title: true,
@@ -33,12 +41,13 @@ export class CoursesService {
     const [data, total] = await this.db.$transaction([
       this.db.course.findMany({
         where,
+        include: bookCounts,
         ...paging(q),
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       }),
       this.db.course.count({ where }),
     ]);
-    return listed(await Promise.all(data.map(c=>this.cover(c))), total, q);
+    return listed(await Promise.all(data.map(c=>this.summary(c))), total, q);
   }
   async detail(id: string) {
     const course = (
@@ -48,10 +57,12 @@ export class CoursesService {
           AND: [published()],
         },
         include: {
+          _count: bookCounts._count,
           chapters: {
             where: { status: 'published' },
             orderBy: { position: 'asc' },
             include: {
+              _count: bookCounts._count,
               episodes: {
                 where: published(),
                 orderBy: { position: 'asc' },
@@ -62,7 +73,16 @@ export class CoursesService {
         },
       })) ?? fail(404, 'NOT_FOUND', 'Course not found')
     );
-    return this.cover(course);
+    const { _count, ...metadata } = course;
+    return this.cover({
+      ...metadata,
+      bookCount: _count.books + course.chapters.reduce((total, chapter) => total + chapter._count.books, 0),
+      chapters: course.chapters.map(({ _count, ...chapter }) => ({ ...chapter, bookCount: _count.books })),
+    });
+  }
+  private summary(course: Prisma.CourseGetPayload<{ include: typeof bookCounts }>) {
+    const { _count, chapters, ...metadata } = course;
+    return this.cover({ ...metadata, bookCount: _count.books + chapters.reduce((total, chapter) => total + chapter._count.books, 0) });
   }
   private async cover<T extends {coverUrl:string|null}>(course:T) {return {...course,coverUrl:course.coverUrl?await this.storage.mediaUrl(course.coverUrl):null};}
   async mine(userId: string, q: PageDto) {
@@ -71,12 +91,12 @@ export class CoursesService {
       this.db.enrollment.findMany({
         where,
         ...paging(q),
-        include: { course: true },
+        include: { course: { include: bookCounts } },
         orderBy: { enrolledAt: 'desc' },
       }),
       this.db.enrollment.count({ where }),
     ]);
-    return listed(await Promise.all(data.map(async e=>({...e,course:await this.cover(e.course)}))), total, q);
+    return listed(await Promise.all(data.map(async e=>({...e,course:await this.summary(e.course)}))), total, q);
   }
   async enroll(userId: string, id: string) {
     await this.access.course(id);

@@ -21,6 +21,7 @@ export class ProgressService {
       select: {
         id: true,
         title: true,
+        _count: { select: { books: { where: { status: 'published' } } } },
         episodes: {
           where: published(),
           orderBy: { position: 'asc' },
@@ -50,6 +51,7 @@ export class ProgressService {
       return {
         id: c.id,
         title: c.title,
+        bookCount: c._count.books,
         progressPct: percent(completed, episodes.length),
         episodes,
       };

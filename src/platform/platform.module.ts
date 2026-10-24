@@ -18,6 +18,7 @@ import {AdminContentModule} from '../admin-content/admin-content.module.js';
 import {AdminLearningToolsModule} from '../admin-learning-tools/admin-learning-tools.module.js';
 import {AdminQuizzesModule} from '../admin-quizzes/admin-quizzes.module.js';
 import {AdminDashboardModule} from '../admin-dashboard/admin-dashboard.module.js';
+import {BooksModule} from '../books/books.module.js';
 @Module({
   imports: [
     SharedModule,
@@ -37,6 +38,7 @@ import {AdminDashboardModule} from '../admin-dashboard/admin-dashboard.module.js
     AdminLearningToolsModule,
     AdminQuizzesModule,
     AdminDashboardModule,
+    BooksModule,
   ],
   providers: [WorkerService, PublishingService],
 })
